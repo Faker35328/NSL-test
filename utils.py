@@ -71,12 +71,12 @@ def load_encoder_hparams_and_params(model_size, models_dir):
     model_dir = os.path.join(models_dir, model_size)
     tf_ckpt_path = tf.train.latest_checkpoint(model_dir)
     if not tf_ckpt_path:  # download files if necessary
-        os.makedirs(model_dir, exist_ok=True)
-        download_gpt2_files(model_size, model_dir)
-        tf_ckpt_path = tf.train.latest_checkpoint(model_dir)
+        os.makedirs(model_dir, exist_ok=True)   #创建模型目录
+        download_gpt2_files(model_size, model_dir)  #下载模型文件
+        tf_ckpt_path = tf.train.latest_checkpoint(model_dir)  # update path
 
-    encoder = get_encoder(model_size, models_dir)
-    hparams = json.load(open(os.path.join(model_dir, "hparams.json")))
-    params = load_gpt2_params_from_tf_ckpt(tf_ckpt_path, hparams)
+    encoder = get_encoder(model_size, models_dir)                      #编码器
+    hparams = json.load(open(os.path.join(model_dir, "hparams.json"))) #超参数
+    params = load_gpt2_params_from_tf_ckpt(tf_ckpt_path, hparams)      #模型参数
 
-    return encoder, hparams, params
+    return encoder, hparams, params  #返回编码器，超参数，模型参数
