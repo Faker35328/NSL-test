@@ -49,8 +49,8 @@ def layer_norm(x, g_b, eps: float = 1e-5):
     x_normalized = (x - mean) / (std + eps)  # 归一化
 
     # 使用 gamma 和 beta 进行缩放和偏移
-    g, b = torch.Tensor(g_b['g']), torch.Tensor(g_b['b']) # 将参数移动到同一设备上
-    return g * x_normalized + b  # 应用缩放和偏移
+    g, b = torch.Tensor(g_b['g']), torch.Tensor(g_b['b'])  # 加载 gamma 和 beta
+    return g * x_normalized + b                           # 应用缩放和偏移
 
 
 
@@ -94,6 +94,18 @@ def ffn(x, mlp):  # [n_seq, n_embd] -> [n_seq, n_embd]
 import torch
 
 def attention(q, k, v, mask=None):  # [n_q, d_k], [n_k, d_k], [n_k, d_v], [n_q, n_k] -> [n_q, d_v]
+    """
+            Task: use torch API to implement attention computation according to formula(1) of the following paper
+                  where d_k account for the last dimension of `k`
+            Paper: https://arxiv.org/abs/1706.03762
+            Input:
+                q: Tensor
+                k: Tensor
+                v: Tensor
+                mask: Tensor
+                mlp: dictionary that load from gpt2 weight. w_b1 and w_b2 are the params of two linear layer
+            Output: Tensor
+        """
     d_k = k.size(-1)  # 获取键的最后一个维度，即 d_k
 
     # 计算注意力得分
@@ -178,14 +190,12 @@ def gpt2(inputs, params, n_head):  # [n_seq] -> [n_seq, n_vocab]
     return x @ wte.T  # [n_seq, n_embd] -> [n_seq, n_vocab]
 
 def generate(inputs, params, n_head, n_tokens_to_generate):
-    from tqdm import tqdm
-
+    from tqdm import tqdm  #显示进度条的工具
 
     for _ in tqdm(range(n_tokens_to_generate), "generating"):  # auto-regressive decode loop
         logits = gpt2(inputs, params, n_head=n_head)  # model forward pass
         next_id = np.argmax(logits[-1])  # greedy sampling
         inputs.append(int(next_id))  # append prediction to input
-
 
     return inputs[len(inputs) - n_tokens_to_generate:]  # only return generated ids
 
@@ -195,6 +205,9 @@ def main(prompt: str, n_tokens_to_generate: int = 5, model_size: str = "124M", m
 
     # load encoder, hparams, and params from the released open-ai gpt-2 files
     encoder, hparams, params = load_encoder_hparams_and_params(model_size, models_dir)
+    '''
+    encoder为编码器，hparams为超参数，params为模型参数
+    '''
 
     # encode the input string using the BPE tokenizer
     input_ids = encoder.encode(prompt)

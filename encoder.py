@@ -98,7 +98,7 @@ class Encoder:
         self.cache[token] = word
         return word
 
-    def encode(self, text):#将输入的文本（text）编码为对应的 BPE（Byte Pair Encoding）tokens
+    def encode(self, text):     #将输入的文本（text）编码为对应的 BPE（Byte Pair Encoding）tokens
         bpe_tokens = []
         for token in re.findall(self.pat, text):
             token = "".join(self.byte_encoder[b] for b in token.encode("utf-8"))
