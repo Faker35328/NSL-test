@@ -149,6 +149,7 @@ def mha(x, attn, n_head):  # [n_seq, n_embd] -> [n_seq, n_embd]
 
     # Causal mask to hide future inputs from being attended to
     n_seq = x.size(0)
+
     causal_mask = torch.tril(torch.ones(n_seq, n_seq)).bool()  # Lower triangular matrix for causal masking
 
     # Perform attention over each head
@@ -159,7 +160,6 @@ def mha(x, attn, n_head):  # [n_seq, n_embd] -> [n_seq, n_embd]
 
     # Out projection
     x = linear(x, c_proj)  # [n_seq, n_embd] -> [n_seq, n_embd]
-
     return x
 
 
