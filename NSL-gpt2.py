@@ -91,75 +91,73 @@ def ffn(x, mlp):  # [n_seq, n_embd] -> [n_seq, n_embd]
     return x  # 输出最终结果
 
 
-import torch
 
-def attention(q, k, v, mask=None):  # [n_q, d_k], [n_k, d_k], [n_k, d_v], [n_q, n_k] -> [n_q, d_v]
+def attention(q, k, v, mask=None):
     """
-            Task: use torch API to implement attention computation according to formula(1) of the following paper
-                  where d_k account for the last dimension of `k`
-            Paper: https://arxiv.org/abs/1706.03762
-            Input:
-                q: Tensor
-                k: Tensor
-                v: Tensor
-                mask: Tensor
-                mlp: dictionary that load from gpt2 weight. w_b1 and w_b2 are the params of two linear layer
-            Output: Tensor
-        """
-    d_k = k.size(-1)  # 获取键的最后一个维度，即 d_k
+    Task: use torch API to implement attention computation according to formula (1) of the following paper,
+          where d_k accounts for the last dimension of `k`.
+    Paper: https://arxiv.org/abs/1706.03762
+    Input:
+        q: Tensor
+        k: Tensor
+        v: Tensor
+        mask: Tensor
+    Output: Tensor
+    """
+    dk = q.size(-1)
+    # 计算缩放的点积注意力分数
+    scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(dk)  # [n_head, n_seq, n_seq]
 
-    # 计算注意力得分
-    scores = torch.matmul(q, k.transpose(-2, -1)) / torch.sqrt(torch.tensor(d_k, dtype=q.dtype))  # [n_q, n_k]
-
-    # 应用掩码
     if mask is not None:
-        # 注意，这里掩码应该和得分矩阵同尺寸，并且掩盖的部分设置为负无穷
         scores = scores.masked_fill(mask == 0, float('-inf'))
 
     # 计算注意力权重
-    attn_weights = torch.softmax(scores, dim=-1)  # [n_q, n_k]
+    attn_weights = torch.softmax(scores, dim=-1)  # [n_head, n_seq, n_seq]
 
-    # 加权求和
-    output = torch.matmul(attn_weights, v)  # [n_q, d_v]
+    # 计算注意力输出
+    output = torch.matmul(attn_weights, v)  # [n_head, n_seq, head_dim]
+    return output
 
-    return output  # 返回最终输出
-
-
-def mha(x, attn, n_head):  # [n_seq, n_embd] -> [n_seq, n_embd]
+def mha(x, attn, n_head):     # [n_seq, n_embd] -> [n_seq, n_embd]
+    
     """
-    Task: Complete the code of the multi-head attention
+    Task: Complete the code of the multi-head attention.
 
     Input:
         x: Tensor
-        attn: dictionary that load from gpt2 weight. c_attn and c_proj are the params of two linear layer
-        n_head: number of head
+        attn: dictionary that load from GPT-2 weights. c_attn and c_proj are the params of two linear layers.
+        n_head: number of heads
     Output: Tensor after multi-head attention and linear transformation, shape [n_seq, n_embd].
     """
     c_attn, c_proj = attn['c_attn'], attn['c_proj']
 
-    # qkv projection
-    x = linear(x, c_attn)  # [n_seq, n_embd] -> [n_seq, 3*n_embd]
+    # 线性映射得到 Q、K、V
+    x = linear(x, c_attn)  # [n_seq, n_embd] -> [n_seq, 3 * n_embd]
 
-    # Split into qkv
-    qkv = torch.chunk(x, 3, dim=-1)  # [n_seq, 3*n_embd] -> 3 * [n_seq, n_embd]
-
-    # Split into heads
-    qkv_heads = [qkv_part.chunk(n_head, dim=-1) for qkv_part in qkv]  # 3 * [n_seq, n_embd] -> 3 * n_head * [n_seq, n_embd/n_head]
-    qkv_heads = list(zip(*qkv_heads))  # [3, n_head, n_seq, n_embd/n_head]
-
-    # Causal mask to hide future inputs from being attended to
     n_seq = x.size(0)
+    n_embd = c_proj['w'].shape[0]  # 嵌入维度
+    head_dim = n_embd // n_head  # 每个头的维度
 
-    causal_mask = torch.tril(torch.ones(n_seq, n_seq)).bool()  # Lower triangular matrix for causal masking
+    # 正确地拆分 Q、K、V
+    q, k, v = x.chunk(3, dim=-1)  # 等分为 q, k, v，每个形状：[n_seq, n_embd]
 
-    # Perform attention over each head
-    out_heads = [attention(q, k, v, causal_mask) for q, k, v in qkv_heads]  # n_head * [n_seq, n_embd/n_head]
+    # 分割成多头并调整形状
+    q = q.view(n_seq, n_head, head_dim).transpose(0, 1)  # [n_head, n_seq, head_dim]
+    k = k.view(n_seq, n_head, head_dim).transpose(0, 1)
+    v = v.view(n_seq, n_head, head_dim).transpose(0, 1)
 
-    # Merge heads
-    x = torch.cat(out_heads, dim=-1)  # n_head * [n_seq, n_embd/n_head] --> [n_seq, n_embd]
+    # 创建因果掩码
+    causal_mask = torch.tril(torch.ones(n_seq, n_seq)).to(x.device)  # [n_seq, n_seq]
+    causal_mask = causal_mask.unsqueeze(0)  # [1, n_seq, n_seq]
 
-    # Out projection
-    x = linear(x, c_proj)  # [n_seq, n_embd] -> [n_seq, n_embd]
+    # 调用 attention 函数
+    attn_output = attention(q, k, v, mask=causal_mask)  # [n_head, n_seq, head_dim]
+
+    # 调整形状并合并所有头
+    attn_output = attn_output.transpose(0, 1).contiguous().view(n_seq, -1)  # [n_seq, n_embd]
+
+    # 通过输出线性层
+    x = linear(attn_output, c_proj)  # [n_seq, n_embd] -> [n_seq, n_embd]
     return x
 
 
